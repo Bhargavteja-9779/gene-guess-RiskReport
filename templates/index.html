@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>GeneGuess — Family History Risk Estimator</title>
+  <link href="/static/css/style.css" rel="stylesheet">
+  <!-- Chart.js script (UMD build) -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <main class="app" role="main" aria-label="GeneGuess application">
+    <section class="card">
+      <div class="header">
+        <div class="logo"><img src="/static/img/logo.svg" alt="GeneGuess logo" style="width:42px;height:42px"></div>
+        <div>
+          <div class="title">GeneGuess</div>
+          <div class="subtitle">Family-history based risk estimator — demo (not a diagnosis)</div>
+        </div>
+      </div>
+
+      <form id="frm" aria-label="Prediction form">
+        <div class="form-grid">
+          <div class="form-row">
+            <label for="age">Age</label>
+            <input id="age" name="age" class="input" type="number" value="45" required />
+          </div>
+          <div class="form-row">
+            <label for="bmi">BMI</label>
+            <input id="bmi" name="bmi" class="input" type="number" step="0.1" value="24.5" required />
+          </div>
+
+          <div class="form-row">
+            <label for="first_deg_relatives">First-degree relatives</label>
+            <input id="first_deg_relatives" name="first_deg_relatives" class="input" type="number" value="1" required />
+          </div>
+          <div class="form-row">
+            <label for="second_deg_relatives">Second-degree relatives</label>
+            <input id="second_deg_relatives" name="second_deg_relatives" class="input" type="number" value="1" required />
+          </div>
+
+          <div class="form-row">
+            <label for="consanguinity">Consanguinity (0/1)</label>
+            <input id="consanguinity" name="consanguinity" class="input" type="number" min="0" max="1" value="0" required />
+          </div>
+          <div class="form-row">
+            <label for="known_marker">Known genetic marker (0/1)</label>
+            <input id="known_marker" name="known_marker" class="input" type="number" min="0" max="1" value="0" required />
+          </div>
+
+          <div class="form-row">
+            <label for="smoker">Smoker (0/1)</label>
+            <input id="smoker" name="smoker" class="input" type="number" min="0" max="1" value="0" required />
+          </div>
+
+          <div class="full">
+            <button type="submit" class="btn btn-primary">Estimate risk</button>
+            <button type="button" id="btnExplain" class="btn btn-ghost">Explain</button>
+            <button type="button" id="btnCopy" class="btn btn-ghost">Copy</button>
+            <button type="button" id="btnDownload" class="btn btn-ghost">Download report</button>
+          </div>
+        </div>
+      </form>
+
+      <div id="resultCard" class="result d-none" aria-live="polite" style="display:none;margin-top:12px">
+        <div style="display:flex; justify-content:space-between; align-items:center">
+          <div>
+            <div style="font-size:12px;color:var(--muted)">Estimated probability</div>
+            <div class="prob-big" id="probPct">—</div>
+            <div id="riskLabel" style="margin-top:4px">—</div>
+          </div>
+          <div style="width:320px">
+            <canvas id="contribChart" height="180"></canvas>
+          </div>
+        </div>
+
+        <div class="contribs" id="contribList" aria-label="Feature contributions"></div>
+      </div>
+    </section>
+
+    <aside class="side">
+      <div class="card metrics" aria-hidden="false">
+        <h4 style="margin:0 0 10px 0">Model metrics</h4>
+        <div class="metric"><div>Accuracy</div><div id="m_acc">—</div></div>
+        <div class="metric"><div>Precision</div><div id="m_prec">—</div></div>
+        <div class="metric"><div>Recall</div><div id="m_rec">—</div></div>
+        <div class="metric"><div>F1</div><div id="m_f1">—</div></div>
+        <div class="metric"><div>ROC AUC</div><div id="m_auc">—</div></div>
+        <small style="color:var(--muted);display:block;margin-top:8px">Loaded from server artifacts — demo data</small>
+      </div>
+
+      <div class="card">
+        <h5 style="margin:0 0 10px 0">About</h5>
+        <p style="color:var(--muted);font-size:13px;margin:0">
+          GeneGuess shows a model-derived risk estimate based on family history. This demo is for educational use only.
+        </p>
+        <div style="margin-top:12px">
+          <a class="btn btn-ghost" href="/static/roc.png" target="_blank">ROC curve</a>
+          <a class="btn btn-ghost" href="/static/cal.png" target="_blank">Calibration</a>
+        </div>
+      </div>
+    </aside>
+  </main>
+
+  <!-- explanation modal -->
+  <div id="modal" class="modal" role="dialog" aria-modal="true" aria-hidden="true">
+    <div class="box">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <h4 style="margin:0">Model explanation</h4>
+        <button id="modalClose" class="btn btn-ghost">Close</button>
+      </div>
+      <div class="modal-body" style="margin-top:12px;color:var(--muted)"></div>
+    </div>
+  </div>
+
+  <script src="/static/js/app.js"></script>
+  <script>
+    // inject server metrics if available
+    (function(){
+      fetch('/static/metrics_summary.json').then(r=>r.json()).then(d=>{
+        if(d && d.metrics){
+          const m = d.metrics;
+          document.getElementById('m_acc').innerText = (m.accuracy||0).toFixed(3);
+          document.getElementById('m_prec').innerText = (m.precision||0).toFixed(3);
+          document.getElementById('m_rec').innerText = (m.recall||0).toFixed(3);
+          document.getElementById('m_f1').innerText = (m.f1||0).toFixed(3);
+          document.getElementById('m_auc').innerText = (m.roc_auc||0).toFixed(3);
+        }
+      }).catch(()=>{/*ignore*/});
+    })();
+  </script>
+</body>
+</html>
